@@ -51,3 +51,5 @@ dotenv.config({ encoding: 'latin1' })
 #### Debug
 
 Default: `false`
+
+You may turn on logging to help debug why certain keys or values are not being set as you expect.
