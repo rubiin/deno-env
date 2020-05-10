@@ -30,7 +30,7 @@ You can additionally, pass options to `config`.
 
 #### Path
 
-Default: `'.env'`
+Default: path.resolve(Deno.cwd(), '.env')
 
 You may specify a custom path if your file containing environment variables is located elsewhere.
 
@@ -53,3 +53,19 @@ dotenv.config({ encoding: 'latin1' })
 Default: `false`
 
 You may turn on logging to help debug why certain keys or values are not being set as you expect.
+
+
+```ts
+dotenv.config({ debug: false })
+```
+
+#### SetEnv
+
+Default: `true`
+
+Set to true to export all .env variables to the current processes environment. Variables are then accessable via deno's env function.
+
+
+```ts
+dotenv.config({ setEnv: true })
+```

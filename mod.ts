@@ -1,90 +1,78 @@
 
-function log(message : string ) {
+function log(message: string) {
 	console.log(`[deno-env][DEBUG] ${message}`)
 }
 
-const NEWLINE = '\n'
-const RE_INI_KEY_VAL = /^\s*([\w.-]+)\s*=\s*(.*)?\s*$/
-const RE_NEWLINES = /\\n/g
-const NEWLINES_MATCH = /\n|\r|\r\n/
+/**
+ * Variables defined on .env file or environment.
+ */
+
+export interface DotEnvVariables {
+	[name: string]: string;
+}
 
 
-function parse(src: string, options : any) {
-	const debug = Boolean(options && options.debug)
-	const obj : any = {}
+/**
+ * Options to change dotenv's default behavior. Like change .env file path.
+ */
 
-	// convert Buffers before splitting into lines and processing
-	src.toString().split(NEWLINES_MATCH).forEach(function (line, idx) {
-		// matching "KEY' and 'VAL' in 'KEY=VAL'
-		const keyValueArr = line.match(RE_INI_KEY_VAL)
-		// matched?
-		if (keyValueArr != null) {
-			const key = keyValueArr[1]
-			// default undefined or missing values to empty string
-			let val = (keyValueArr[2] || '')
-			const end = val.length - 1
-			const isDoubleQuoted = val[0] === '"' && val[end] === '"'
-			const isSingleQuoted = val[0] === "'" && val[end] === "'"
+export interface DotEnvOptions {
+	path?: string;
+	debug?: boolean;
+	setEnv?: boolean;
+	encoding?: string;
+}
 
-			// if single or double quoted, remove quotes
-			if (isSingleQuoted || isDoubleQuoted) {
-				val = val.substring(1, end)
+const LINE_BREAK = /\r\n|\n|\r/;
+const DECLARATION = /^\s*(\w+)\s*\=\s*(.*)?\s*$/;
 
-				// if double quoted, expand newlines
-				if (isDoubleQuoted) {
-					val = val.replace(RE_NEWLINES, NEWLINE)
-				}
-			} else {
-				// remove surrounding whitespace
-				val = val.trim()
-			}
+/**
+ * Parse the source of a `.env` file into an object with the variables.
+ */
+export function parse(source: string): DotEnvVariables {
+	const lines = source.split(LINE_BREAK);
+	return lines.reduce((vars: DotEnvVariables, line: string) => {
+		if (!DECLARATION.test(line))
+			return vars;
 
-			obj[key] = val
+		const [, name, value] = DECLARATION.exec(line)!;
+
+		if (!value)
+			vars[name] = "";
+		else if (/^".*"$/.test(value))
+			vars[name] = value.replace(/^\"(.*)\"$/, "$1").replace(/\\n/g, "\n");
+		else
+			vars[name] = value;
+
+		return vars;
+	}, {} as DotEnvVariables);
+}
+
+
+
+/**
+ * Read `.env` file from project's root. Merge it's variables with environment
+ * ones and return it.
+ * @example
+ * db.connect(env.DB_USERNAME, env.DB_PASSWORD);
+ */
+export function config({ path = `${Deno.cwd() }/.env` , debug = false, encoding= 'utf-8', setEnv= true}: DotEnvOptions = {}) {
+
+	const file = Deno.readFileSync(path);
+	const decoder = new TextDecoder(encoding);
+	const dotEnvs = parse(decoder.decode(file));
+
+	if (setEnv){
+	Object.keys(dotEnvs).forEach(function (key: any) {
+		if (!Deno.env.get(key)) {
+			Deno.env.set(key, dotEnvs[key])
 		} else if (debug) {
-			log(`did not match key and value when parsing line ${idx + 1}: ${line}`)
+			log(`"${key}" is already defined in \`Deno.env\` and will not be overwritten`)
 		}
 	})
-
-	return obj
-}
-
-// Populates process.env from .env file
-export function config(options : any)  {
-	let dotenvPath =  '.env'
-	let encoding /*: string */ = 'utf8'
-	let debug = false
-
-	if (options) {
-		if (options.path != null) {
-			dotenvPath = options.path
-		}
-		if (options.encoding != null) {
-			encoding = options.encoding
-		}
-		if (options.debug != null) {
-			debug = true
-		}
-	}
-
-	try {
-
-		const file = Deno.readFileSync(dotenvPath);
-		const decoder = new TextDecoder(encoding);
-		const parsed = parse(decoder.decode(file),config)
-
-		Object.keys(parsed).forEach(function (key: any) {
-			if (!Deno.env.get(key)) {
-
-			Deno.env.set(key,parsed[key])
-			} else if (debug) {
-				log(`"${key}" is already defined in \`Deno.env\` and will not be overwritten`)
-			}
-		})
-
-		return { parsed }
-	} catch (e) {
-		return { error: e }
-	}
 }
 
 
+	return dotEnvs
+
+}
